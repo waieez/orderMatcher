@@ -39,20 +39,23 @@ class Market:
 
     def buy(self, acc, qty, price=None):
         if price is None:
-            if not self.asks:
-                return []
-            price = self.asks[0].price
+            if self.asks:
+              price = self.asks[0].price
+            elif self.bids:
+              price = -self.bids[0].price
         
         order = Order(price=-price, qty=qty, acc=acc)
-
         return self.try_match(order, self.bids, self.asks)
 
 
     def sell(self, acc, qty, price=None):
         if price is None:
-            if not self.bids:
-                return []
+          if self.bids:
             price = -self.bids[0].price
+          elif self.asks:
+            price = self.asks[0].price
+          else:
+            return []
 
         order = Order(price=price, qty=qty, acc=acc)
         return self.try_match(order, self.asks, self.bids)
@@ -78,8 +81,9 @@ class Market:
 
     def match(self, order, Y, transactions):
         while order.qty > 0 and Y:
+            price = Y[0].price
             for algorithm in self.algoritms:
-                if not (order.qty > 0 and Y):
+                if not (order.qty > 0 and Y and Y[0].price == price):
                   break
                 algorithm(order, Y, transactions)
         return order
@@ -149,6 +153,7 @@ market = Market([prorata, fifo])
 
 t = market.buy("alice", 10, 10)
 t = market.buy("bob", 10, 10)
-t = market.sell("charlie", 25, 10)
-t = market.buy("dave", 200)
-t = market.sell("eli", 195)
+t = market.buy("charlie", 10, 15)
+t = market.sell("dave", 25, 15)
+t = market.buy("eli", 20)
+t = market.sell("frank", 25)
