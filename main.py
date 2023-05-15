@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
-from heapq import heappush, heappop
-from uuid import uuid4
 from datetime import datetime
-import math
+from uuid import uuid4
+from heapq import heappush, heappop
 
 
 @dataclass(order=True, kw_only=True)
@@ -13,9 +12,8 @@ class Order:
     acc: str
     _id: str = field(default_factory=uuid4)
 
-
     def __repr__(self):
-      return f"{self.price, self.qty, self.acc}"
+        return f"({self.price, self.qty, self.acc})"
 
 
 @dataclass(order=True, kw_only=True)
@@ -25,9 +23,10 @@ class Transaction:
     qty: int
     x: str
     y: str
+    _id: str = field(default_factory=uuid4)
 
     def __repr__(self):
-      return f"{self.price, self.qty, self.x, self.y}"
+        return f"({self.price}, {self.qty}, {self.x}, {self.y})"
 
 
 class Market:
@@ -37,64 +36,63 @@ class Market:
         self.asks = []
         self.algoritms = algoritms
 
-    def buy(self, acc, qty, price=None):
+  
+    def __repr__(self):
+        return f"\nbids:\n{self.bids}\nasks:\n{self.asks}\n"
+
+  
+    def buy(self, acc, qty, price=None): 
         if price is None:
             if self.asks:
-              price = self.asks[0].price
+                price = self.asks[0].price
             elif self.bids:
-              price = -self.bids[0].price
-        
+                price = -self.bids[0].price
+
+        if qty <= 0:
+            return []
+
         order = Order(price=-price, qty=qty, acc=acc)
         return self.try_match(order, self.bids, self.asks)
 
 
     def sell(self, acc, qty, price=None):
         if price is None:
-          if self.bids:
-            price = -self.bids[0].price
-          elif self.asks:
-            price = self.asks[0].price
-          else:
-            return []
+            if self.bids:
+                price = -self.bids[0].price
+            elif self.bids:
+                price = self.asks[0].price
+
+        if qty <= 0:
+           return []
 
         order = Order(price=price, qty=qty, acc=acc)
         return self.try_match(order, self.asks, self.bids)
 
-
-    def try_match(self, order, X, Y):
-        print("try", order)
-        print("before:\n", self)
+  
+    def try_match(self, x, X, Y):
         transactions = []
-        # sell @ 9, buy [-10, -9, -8, -7]
-        # buy @ 9, sell [8, 9, 10, 11]
-        while Y and order.qty > 0 and -order.price >= Y[0].price:
-            order = self.match(order, Y, transactions)
+        while Y and x.qty > 0 and -x.price >= Y[0].price:
+            self.match(x, Y, transactions)
 
-        if order.qty > 0:
-            heappush(X, order)
-
-        if transactions:
-          print(transactions)
-          print("after:\n", self)
+        if x.qty > 0:
+            heappush(X, x)
+        
         return transactions
 
 
-    def match(self, order, Y, transactions):
-        while order.qty > 0 and Y:
-            price = Y[0].price
-            for algorithm in self.algoritms:
-                if not (order.qty > 0 and Y and Y[0].price == price):
-                  break
-                algorithm(order, Y, transactions)
-        return order
+    def match(self, x, Y, transactions):
+        price = Y[0].price
+        
+        for algorithm in self.algoritms:
+            # break if order filled @ level
+            if x.qty <= 0 or not Y or Y[0].price != price:
+                break
+            algorithm(x, Y, transactions)
 
-
-    def __repr__(self):
-      return "bid:{}\nask:{}".format(self.bids, self.asks)
+        return transactions
 
 
 def fifo(x, Y, transactions):
-    print("fifo", x)
     y = Y[0]
     price = abs(y.price)
     qty = min(x.qty, y.qty)
@@ -109,51 +107,55 @@ def fifo(x, Y, transactions):
     )
 
     transactions.append(txn)
-
     if y.qty <= 0:
         heappop(Y)
-
+        
     return transactions
 
 
 def prorata(x, Y, transactions):
-    print("prorata", x)
-    y = Y[0]
-    total = 0
     orders = []
-    price = y.price
-    while Y and Y[0].price == price:
-        order = heappop(Y)
-        total += order.qty
-        orders.append(order)
+    price = Y[0].price
+    total = 0
 
-    distributed = 0
+    while Y and Y[0].price == price:
+        y = heappop(Y)
+        orders.append(y)
+        total += y.qty
+
+    filled = 0
     price = abs(price)
     for y in orders:
-        ratio = (y.qty * 1.0) / total 
-        filled = min(math.floor(ratio * x.qty), y.qty)
+        ratio = (y.qty * 1.0) / total
+        qty = int(min(x.qty * ratio, y.qty))
+        y.qty -= qty
+        filled += qty
+
         txn = Transaction(
             price=price,
-            qty=filled,
+            qty=qty,
             x=x.acc,
             y=y.acc
         )
         transactions.append(txn)
-        y.qty -= filled
-        distributed += filled
-    x.qty -= distributed
-    for order in orders:
-      if order.qty <= 0:
-        continue
-      heappush(Y, order)
+        
+        if y.qty > 0:
+            heappush(Y, y)
+
+    x.qty -= filled
     return transactions
 
 
 market = Market([prorata, fifo])
 
 t = market.buy("alice", 10, 10)
+print(t)
 t = market.buy("bob", 10, 10)
+print(t)
 t = market.buy("charlie", 10, 15)
-t = market.sell("dave", 25, 15)
-t = market.buy("eli", 20)
-t = market.sell("frank", 25)
+print(t)
+t = market.sell("dave", 25, 10)
+print(t)
+t = market.sell("eli", 10)
+print(t)
+print(market)
